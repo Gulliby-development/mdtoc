@@ -349,7 +349,7 @@ describe("CLI subprocess behavior", () => {
   test("processes a resolved duplicate path once", async () => {
     const duplicate = join(directory, "duplicate.md");
     writeFileSync(duplicate, marked("# Duplicate"));
-    const result = await run(["--check", "duplicate.md", duplicate]);
+    const result = await run(["--check", "duplicate.md", "./duplicate.md"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe(
       'TOC is stale in "duplicate.md". Run without --check to update it.\n',
