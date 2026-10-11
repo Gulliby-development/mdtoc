@@ -1,23 +1,25 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { updateToc, validateMaxDepth } from "./toc";
 
 export interface CliOptions {
-  file?: string;
+  files: string[];
   check: boolean;
   maxDepth: number;
   help: boolean;
 }
 
-export const USAGE = `Usage: bun run src/cli.ts [--check] [--max-depth <1-6>] <file.md>
+export const USAGE = `Usage: bun run src/cli.ts [--check] [--max-depth <1-6>] <file>...
 
 Generate a Markdown table of contents between <!-- toc --> and <!-- tocstop -->.
-  --check             Exit 1 if the TOC is stale; never write the file.
+  <file>...           Markdown files to update (or check).
+  --check             Exit 1 if the TOC is stale; never write the files.
   --max-depth <1-6>   Include heading levels up to this depth (default: 6).
   --help, -h          Show this help.
-  --                  Treat remaining arguments as the file path.`;
+  --                  Treat remaining arguments as file paths.`;
 
 export function parseArgs(args: string[]): CliOptions {
-  const options: CliOptions = { check: false, maxDepth: 6, help: false };
+  const options: CliOptions = { files: [], check: false, maxDepth: 6, help: false };
   let positionalOnly = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -39,15 +41,12 @@ export function parseArgs(args: string[]): CliOptions {
       options.maxDepth = Number(value);
     } else if (!positionalOnly && argument.startsWith("-")) {
       throw new Error(`Unknown option: ${argument}. Use --help for usage.`);
-    } else {
-      if (options.file !== undefined) {
-        throw new Error("Provide exactly one Markdown file path. Use --help for usage.");
-      }
-      options.file = argument;
+    } else if (!options.files.some((file) => resolve(file) === resolve(argument))) {
+      options.files.push(argument);
     }
   }
   validateMaxDepth(options.maxDepth);
-  if (!options.help && !options.file) {
+  if (!options.help && options.files.length === 0) {
     throw new Error("Provide a Markdown file path. Use --help for usage.");
   }
   return options;
@@ -61,23 +60,27 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
       console.log(USAGE);
       return 0;
     }
-    const file = options.file;
-    if (!file) {
-      throw new Error("Provide a Markdown file path.");
-    }
-    const markdown = await readFile(file, "utf8");
-    const updated = updateToc(markdown, options.maxDepth);
-    if (options.check) {
-      if (updated !== markdown) {
-        console.error(`TOC is stale in "${file}". Run without --check to update it.`);
-        return 1;
+    let failed = false;
+    const prefixErrors = options.files.length > 1;
+    for (const file of options.files) {
+      try {
+        const markdown = await readFile(file, "utf8");
+        const updated = updateToc(markdown, options.maxDepth);
+        if (options.check) {
+          if (updated !== markdown) {
+            console.error(`TOC is stale in "${file}". Run without --check to update it.`);
+            failed = true;
+          }
+        } else if (updated !== markdown) {
+          await writeFile(file, updated, "utf8");
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`mdtoc: ${prefixErrors ? `${file}: ` : ""}${message}`);
+        failed = true;
       }
-      return 0;
     }
-    if (updated !== markdown) {
-      await writeFile(file, updated, "utf8");
-    }
-    return 0;
+    return failed ? 1 : 0;
   } catch (error) {
     console.error(`mdtoc: ${error instanceof Error ? error.message : String(error)}`);
     return 1;

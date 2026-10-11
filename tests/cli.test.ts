@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -190,11 +190,23 @@ describe("TOC rendering and marker replacement", () => {
 describe("CLI argument parsing", () => {
   test("uses depth 6 and generation mode by default", () => {
     expect(parseArgs(["guide.md"])).toEqual({
-      file: "guide.md",
+      files: ["guide.md"],
       check: false,
       maxDepth: 6,
       help: false,
     });
+  });
+
+  test("accepts multiple paths in order and deduplicates resolved paths", () => {
+    expect(parseArgs(["guide.md", "other.md", "./guide.md"]).files).toEqual([
+      "guide.md",
+      "other.md",
+    ]);
+  });
+
+  test("retains the no-path error while allowing help without a path", () => {
+    expect(() => parseArgs([])).toThrow("Provide a Markdown file path. Use --help for usage.");
+    expect(parseArgs(["--help"]).files).toEqual([]);
   });
 
   test("accepts options before or after the path and equals-style depth", () => {
@@ -203,10 +215,10 @@ describe("CLI argument parsing", () => {
     );
   });
 
-  test("supports help and an option-like path after --", () => {
+  test("supports help and option-like paths after --", () => {
     expect(parseArgs(["--help"]).help).toBe(true);
     expect(parseArgs(["-h"]).help).toBe(true);
-    expect(parseArgs(["--", "-guide.md"]).file).toBe("-guide.md");
+    expect(parseArgs(["--", "-guide.md", "another.md"]).files).toEqual(["-guide.md", "another.md"]);
   });
 });
 
@@ -269,6 +281,113 @@ describe("CLI subprocess behavior", () => {
     expect(snapshot()).toEqual(current);
   });
 
+  test("checks multiple current files successfully and silently", async () => {
+    const first = join(directory, "first.md");
+    const second = join(directory, "second.md");
+    writeFileSync(first, updateToc(marked("# First")));
+    writeFileSync(second, updateToc(marked("# Second")));
+
+    const result = await run(["--check", first, second]);
+    expect(result).toEqual({ exitCode: 0, stdout: "", stderr: "" });
+  });
+
+  test("reports only stale files in multi-file check mode without writing", async () => {
+    const files = ["one.md", "stale.md", "three.md"].map((name) => join(directory, name));
+    writeFileSync(files[0], updateToc(marked("# One")));
+    writeFileSync(files[1], marked("# Stale"));
+    writeFileSync(files[2], updateToc(marked("# Three")));
+    const before = files.map((path) => readFileSync(path));
+
+    const result = await run(["--check", ...files]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      `TOC is stale in "${files[1]}". Run without --check to update it.\n`,
+    );
+    expect(files.map((path) => readFileSync(path))).toEqual(before);
+  });
+
+  test("updates only stale files in a multi-file run", async () => {
+    const current = join(directory, "current.md");
+    const stale = join(directory, "stale.md");
+    writeFileSync(current, updateToc(marked("# Current")));
+    writeFileSync(stale, marked("# Stale"));
+    const currentBefore = readFileSync(current);
+
+    const result = await run([current, stale]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+    expect(readFileSync(current)).toEqual(currentBefore);
+    expect(readFileSync(stale, "utf8")).toBe(updateToc(marked("# Stale")));
+  });
+
+  test("continues after a missing file and prefixes its error", async () => {
+    const stale = join(directory, "later.md");
+    writeFileSync(stale, marked("# Later"));
+    const result = await run(["missing.md", stale]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/^mdtoc: missing\.md: .*\n$/);
+    expect(readFileSync(stale, "utf8")).toBe(updateToc(marked("# Later")));
+  });
+
+  test("continues after invalid markers and reports the exact prefixed error", async () => {
+    const invalid = join(directory, "invalid.md");
+    const stale = join(directory, "later.md");
+    writeFileSync(invalid, "# Missing markers");
+    writeFileSync(stale, marked("# Later"));
+    const result = await run([invalid, stale]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe(
+      "mdtoc: " +
+        invalid +
+        ": Add exactly one <!-- toc --> followed by <!-- tocstop --> to the Markdown file.\n",
+    );
+    expect(readFileSync(stale, "utf8")).toBe(updateToc(marked("# Later")));
+  });
+
+  test("processes a resolved duplicate path once", async () => {
+    const duplicate = join(directory, "duplicate.md");
+    writeFileSync(duplicate, marked("# Duplicate"));
+    const result = await run(["--check", "duplicate.md", duplicate]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe(
+      'TOC is stale in "duplicate.md". Run without --check to update it.\n',
+    );
+  });
+
+  test("applies --max-depth to every file", async () => {
+    const first = join(directory, "first.md");
+    const second = join(directory, "second.md");
+    const body = "# One\n## Two\n### Three";
+    writeFileSync(first, marked(body));
+    writeFileSync(second, marked(body));
+    const result = await run(["--max-depth", "1", first, second]);
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(first, "utf8")).toBe(updateToc(marked(body), 1));
+    expect(readFileSync(second, "utf8")).toBe(updateToc(marked(body), 1));
+  });
+
+  test("single-file failures retain the unprefixed error", async () => {
+    writeFileSync(file, "# Missing markers");
+    const result = await run([file]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe(
+      "mdtoc: Add exactly one <!-- toc --> followed by <!-- tocstop --> to the Markdown file.\n",
+    );
+  });
+
+  test("preserves CRLF endings when updating a file", async () => {
+    const crlf = join(directory, "windows.md");
+    const original = marked("# Windows\n## Child").replaceAll("\n", "\r\n");
+    writeFileSync(crlf, original);
+    const result = await run([crlf]);
+    expect(result.exitCode).toBe(0);
+    const updated = readFileSync(crlf, "utf8");
+    expect(updated).toContain("\r\n");
+    expect(updated.replaceAll("\r\n", "")).not.toContain("\n");
+  });
+
   test.each([1, 3])("generates and checks with --max-depth %i", async (depth) => {
     writeFileSync(file, marked("# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six"));
     const result = await run(["--max-depth", String(depth), file]);
@@ -318,7 +437,6 @@ describe("CLI subprocess behavior", () => {
     { args: [], message: "Markdown file path" },
     { args: ["--unknown"], message: "Unknown option" },
     { args: ["--max-depth"], message: "integer from 1 through 6" },
-    { args: ["one.md", "two.md"], message: "exactly one Markdown file path" },
   ])("rejects invalid arguments: $args", async ({ args, message }) => {
     writeFileSync(file, marked("# Guide"));
     const before = snapshot();
@@ -379,6 +497,34 @@ describe("documentation, license, and existing scaffold", () => {
     expect(readme).toContain("<!-- toc -->");
     expect(readme).toContain("<!-- tocstop -->");
     expect(prose).toMatch(/outside the markers is preserved/i);
+  });
+
+  test("README multi-file example matches real CLI output", async () => {
+    expect(readme).toContain("bun run src/cli.ts --check docs/a.md docs/b.md");
+    const example = 'TOC is stale in "docs/b.md". Run without --check to update it.';
+    expect(readme).toContain(example);
+    expect(readme).toContain("With more than one file, errors are prefixed with the file path");
+
+    const directory = mkdtempSync(join(tmpdir(), "mdtoc README example "));
+    try {
+      const docs = join(directory, "docs");
+      mkdirSync(docs);
+      writeFileSync(join(docs, "a.md"), updateToc(marked("# A")));
+      writeFileSync(join(docs, "b.md"), marked("# B"));
+      const child = Bun.spawn([process.execPath, "run", cli, "--check", "docs/a.md", "docs/b.md"], {
+        cwd: directory,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exitCode, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr.trimEnd()).toBe(example);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test("README documents check-mode exit codes and maximum depth with examples", () => {
