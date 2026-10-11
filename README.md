@@ -68,6 +68,20 @@ bun run src/cli.ts --check README.md
 TOC is stale in "README.md". Run without --check to update it.
 ```
 
+### Several files
+
+```sh
+bun run src/cli.ts --check docs/a.md docs/b.md
+```
+
+When only `docs/b.md` is stale, this prints to stderr and exits 1:
+
+```text
+TOC is stale in "docs/b.md". Run without --check to update it.
+```
+
+With more than one file, errors are prefixed with the file path (`mdtoc: docs/a.md: ...`).
+
 ### Limit heading depth
 
 ```sh
@@ -93,7 +107,7 @@ bun run src/cli.ts "docs/User Guide.md"
 
 | Option | Description |
 |---|---|
-| `<file>` | Markdown file to update (or check). |
+| `<file>...` | Markdown files to update (or check). |
 | `--check` | Do not write; exit 1 if the table of contents is stale. |
 | `--max-depth <1-6>` | Include headings only up to this level. |
 
