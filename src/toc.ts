@@ -13,6 +13,12 @@ export function validateMaxDepth(maxDepth: number): void {
   }
 }
 
+export function validateMinDepth(minDepth: number): void {
+  if (!Number.isInteger(minDepth) || minDepth < 1 || minDepth > 6) {
+    throw new Error("--min-depth must be an integer from 1 through 6.");
+  }
+}
+
 /** Reduce the supported inline Markdown forms to their visible text. */
 export function headingText(markdown: string): string {
   return markdown
@@ -95,20 +101,22 @@ export function extractHeadings(markdown: string): Heading[] {
   return headings;
 }
 
-export function generateToc(markdown: string, maxDepth = 6, newline = "\n"): string {
+export function generateToc(markdown: string, maxDepth = 6, newline = "\n", minDepth = 1): string {
   validateMaxDepth(maxDepth);
+  validateMinDepth(minDepth);
   return extractHeadings(markdown)
-    .filter((heading) => heading.level <= maxDepth)
+    .filter((heading) => heading.level >= minDepth && heading.level <= maxDepth)
     .map((heading) => {
       const label = heading.text.replace(/\\/g, "\\\\").replace(/[[\]]/g, "\\$&");
-      return `${"  ".repeat(heading.level - 1)}- [${label}](#${heading.anchor})`;
+      return `${"  ".repeat(heading.level - minDepth)}- [${label}](#${heading.anchor})`;
     })
     .join(newline);
 }
 
 /** Require one ordered marker pair before constructing any replacement. */
-export function updateToc(markdown: string, maxDepth = 6): string {
+export function updateToc(markdown: string, maxDepth = 6, minDepth = 1): string {
   validateMaxDepth(maxDepth);
+  validateMinDepth(minDepth);
   const start = markdown.indexOf(TOC_START);
   const end = markdown.indexOf(TOC_END);
   if (
@@ -127,6 +135,6 @@ export function updateToc(markdown: string, maxDepth = 6): string {
   const newline = /\r\n|\n|\r/.exec(markdown)?.[0] ?? "\n";
   // A stale TOC must not contribute headings to its own replacement.
   const source = `${before}${newline}${after}`;
-  const toc = generateToc(source, maxDepth, newline);
+  const toc = generateToc(source, maxDepth, newline, minDepth);
   return `${before}${newline}${toc ? toc + newline : ""}${after}`;
 }

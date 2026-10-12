@@ -133,6 +133,16 @@ describe("TOC rendering and marker replacement", () => {
     );
   });
 
+  test("default output remains byte-identical to the established rendering", () => {
+    const markdown = "# Guide\n## Installation\n### Details";
+    const previousDefault =
+      "- [Guide](#guide)\n  - [Installation](#installation)\n    - [Details](#details)";
+    expect(generateToc(markdown)).toBe(previousDefault);
+    expect(updateToc(marked(markdown))).toBe(
+      `<!-- toc -->\n${previousDefault}\n<!-- tocstop -->\n${markdown}`,
+    );
+  });
+
   test.each([
     [1, "- [One](#one)"],
     [3, "- [One](#one)\n  - [Two](#two)\n    - [Three](#three)"],
@@ -142,6 +152,24 @@ describe("TOC rendering and marker replacement", () => {
 
   test("depth filtering retains anchors assigned in full document order", () => {
     expect(generateToc("#### Hello\n## Hello", 3)).toBe("  - [Hello](#hello-1)");
+  });
+
+  test("minimum depth filters shallow headings and indents relative to the minimum", () => {
+    const markdown = "# Guide\n## Installation\n## Usage\n### Sub";
+    expect(generateToc(markdown, 6, "\n", 2)).toBe(
+      "- [Installation](#installation)\n- [Usage](#usage)\n  - [Sub](#sub)",
+    );
+    expect(generateToc(markdown, 3, "\n", 3)).toBe("- [Sub](#sub)");
+  });
+
+  test("minimum-depth filtering retains anchors assigned to skipped headings", () => {
+    expect(generateToc("# Usage\n## Usage", 6, "\n", 2)).toBe("- [Usage](#usage-1)");
+  });
+
+  test("minimum depth can produce an empty TOC block", () => {
+    expect(updateToc(marked("# Guide\n## Installation"), 6, 3)).toBe(
+      "<!-- toc -->\n<!-- tocstop -->\n# Guide\n## Installation",
+    );
   });
 
   test("uses visible inline text in link labels", () => {
@@ -193,6 +221,7 @@ describe("CLI argument parsing", () => {
       files: ["guide.md"],
       check: false,
       maxDepth: 6,
+      minDepth: 1,
       help: false,
     });
   });
@@ -212,6 +241,12 @@ describe("CLI argument parsing", () => {
   test("accepts options before or after the path and equals-style depth", () => {
     expect(parseArgs(["--check", "guide.md", "--max-depth", "3"])).toEqual(
       parseArgs(["--max-depth=3", "guide.md", "--check"]),
+    );
+  });
+
+  test("accepts minimum depth in separated and equals forms", () => {
+    expect(parseArgs(["--min-depth", "2", "guide.md"])).toEqual(
+      parseArgs(["--min-depth=2", "guide.md"]),
     );
   });
 
@@ -368,6 +403,55 @@ describe("CLI subprocess behavior", () => {
     expect(readFileSync(second, "utf8")).toBe(updateToc(marked(body), 1));
   });
 
+  test("generates with minimum depth and checks matching or stale TOCs", async () => {
+    const body = "# Guide\n## Installation\n## Usage\n### Sub";
+    writeFileSync(file, marked(body));
+    const generated = await run(["--min-depth", "2", file]);
+    expect(generated.exitCode).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(updateToc(marked(body), 6, 2));
+
+    const current = snapshot();
+    const checked = await run(["--check", "--min-depth=2", file]);
+    expect(checked.exitCode).toBe(0);
+    expect(checked.stderr).toBe("");
+    expect(snapshot()).toEqual(current);
+
+    const stale = await run(["--check", "--min-depth", "3", file]);
+    expect(stale.exitCode).toBe(1);
+    expect(stale.stderr).toContain("TOC is stale");
+    expect(snapshot()).toEqual(current);
+  });
+
+  test.each([
+    {
+      args: ["--min-depth=0", "unused.md"],
+      message: "--min-depth must be an integer from 1 through 6.",
+    },
+    {
+      args: ["--min-depth=7", "unused.md"],
+      message: "--min-depth must be an integer from 1 through 6.",
+    },
+    {
+      args: ["--min-depth=abc", "unused.md"],
+      message: "--min-depth must be an integer from 1 through 6.",
+    },
+    { args: ["--min-depth"], message: "--min-depth must be an integer from 1 through 6." },
+    {
+      args: ["--min-depth=3", "--max-depth=2", "unused.md"],
+      message: "--min-depth must not be greater than --max-depth.",
+    },
+  ])(
+    "rejects invalid minimum depth before reading or writing: $args",
+    async ({ args, message }) => {
+      writeFileSync(file, marked("# Guide"));
+      const before = snapshot();
+      const result = await run([...args]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toBe(`mdtoc: ${message}\n`);
+      expect(snapshot()).toEqual(before);
+    },
+  );
+
   test("single-file failures retain the unprefixed error", async () => {
     writeFileSync(file, "# Missing markers");
     const result = await run([file]);
@@ -465,6 +549,11 @@ describe("CLI subprocess behavior", () => {
     expect(result.stderr).toBe("");
   });
 
+  test("help documents minimum depth", async () => {
+    const result = await run(["--help"]);
+    expect(result.stdout).toContain("--min-depth");
+  });
+
   test("accepts a relative, option-like filename after --", async () => {
     const name = "-guide.md";
     writeFileSync(join(directory, name), marked("# Guide"));
@@ -533,6 +622,12 @@ describe("documentation, license, and existing scaffold", () => {
     expect(readme).toContain("bun run src/cli.ts --max-depth 3 README.md");
     expect(readme).toContain("bun run src/cli.ts --check --max-depth 3 README.md");
     expect(prose).toMatch(/--max-depth.*integers from 1 through 6/i);
+  });
+
+  test("README documents minimum depth and the page-title example", () => {
+    expect(readme).toContain("--min-depth <1-6>");
+    expect(readme).toMatch(/^### Skip the page title$/m);
+    expect(readme).toContain("bun run src/cli.ts --min-depth 2 README.md");
   });
 
   test("README includes development instructions for all required checks", () => {
