@@ -103,6 +103,24 @@ Quote paths that contain spaces:
 bun run src/cli.ts "docs/User Guide.md"
 ```
 
+### Skip the page title
+
+Use `--min-depth` to leave the page title out of the table of contents while keeping deeper headings:
+
+```sh
+bun run src/cli.ts --min-depth 2 README.md
+```
+
+For a file with `# Guide`, `## Installation`, `## Usage`, and `### Sub`, the generated entries are:
+
+```markdown
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Sub](#sub)
+```
+
+`--min-depth` accepts integers from 1 through 6. Entries are indented relative to the selected minimum depth. Use the same depth when generating and checking.
+
 ### Options
 
 | Option | Description |
@@ -110,6 +128,7 @@ bun run src/cli.ts "docs/User Guide.md"
 | `<file>...` | Markdown files to update (or check). |
 | `--check` | Do not write; exit 1 if the table of contents is stale. |
 | `--max-depth <1-6>` | Include headings only up to this level. |
+| `--min-depth <1-6>` | Skip heading levels above this depth (default 1). |
 
 ### Headings and anchors
 
