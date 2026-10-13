@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,7 +47,7 @@ describe("print mode CLI", () => {
   let directory: string;
 
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), "mdtoc print tests "));
+    directory = realpathSync(mkdtempSync(join(tmpdir(), "mdtoc print tests ")));
   });
 
   afterEach(() => {
