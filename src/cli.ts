@@ -7,21 +7,30 @@ export interface CliOptions {
   check: boolean;
   maxDepth: number;
   minDepth: number;
+  exclude: string[];
   help: boolean;
 }
 
-export const USAGE = `Usage: bun run src/cli.ts [--check] [--max-depth <1-6>] [--min-depth <1-6>] <file>...
+export const USAGE = `Usage: bun run src/cli.ts [--check] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...
 
 Generate a Markdown table of contents between <!-- toc --> and <!-- tocstop -->.
   <file>...           Markdown files to update (or check).
   --check             Exit 1 if the TOC is stale; never write the files.
   --max-depth <1-6>   Include heading levels up to this depth (default: 6).
   --min-depth <1-6>   Skip heading levels above this depth (default: 1).
+  --exclude <text>    Leave out headings with this exact text (repeatable).
   --help, -h          Show this help.
   --                  Treat remaining arguments as file paths.`;
 
 export function parseArgs(args: string[]): CliOptions {
-  const options: CliOptions = { files: [], check: false, maxDepth: 6, minDepth: 1, help: false };
+  const options: CliOptions = {
+    files: [],
+    check: false,
+    maxDepth: 6,
+    minDepth: 1,
+    exclude: [],
+    help: false,
+  };
   let positionalOnly = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -51,6 +60,13 @@ export function parseArgs(args: string[]): CliOptions {
         throw new Error("--min-depth must be an integer from 1 through 6.");
       }
       options.minDepth = Number(value);
+    } else if (!positionalOnly && (argument === "--exclude" || argument.startsWith("--exclude="))) {
+      const value = argument === "--exclude" ? args[++index] : argument.slice("--exclude=".length);
+      const text = value?.trim();
+      if (!text) {
+        throw new Error("--exclude requires a non-empty heading text.");
+      }
+      options.exclude.push(text);
     } else if (!positionalOnly && argument.startsWith("-")) {
       throw new Error(`Unknown option: ${argument}. Use --help for usage.`);
     } else if (!options.files.some((file) => resolve(file) === resolve(argument))) {
@@ -81,7 +97,7 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
     for (const file of options.files) {
       try {
         const markdown = await readFile(file, "utf8");
-        const updated = updateToc(markdown, options.maxDepth, options.minDepth);
+        const updated = updateToc(markdown, options.maxDepth, options.minDepth, options.exclude);
         if (options.check) {
           if (updated !== markdown) {
             console.error(`TOC is stale in "${file}". Run without --check to update it.`);
