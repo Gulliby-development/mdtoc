@@ -101,11 +101,20 @@ export function extractHeadings(markdown: string): Heading[] {
   return headings;
 }
 
-export function generateToc(markdown: string, maxDepth = 6, newline = "\n", minDepth = 1): string {
+export function generateToc(
+  markdown: string,
+  maxDepth = 6,
+  newline = "\n",
+  minDepth = 1,
+  exclude: readonly string[] = [],
+): string {
   validateMaxDepth(maxDepth);
   validateMinDepth(minDepth);
   return extractHeadings(markdown)
-    .filter((heading) => heading.level >= minDepth && heading.level <= maxDepth)
+    .filter(
+      (heading) =>
+        heading.level >= minDepth && heading.level <= maxDepth && !exclude.includes(heading.text),
+    )
     .map((heading) => {
       const label = heading.text.replace(/\\/g, "\\\\").replace(/[[\]]/g, "\\$&");
       return `${"  ".repeat(heading.level - minDepth)}- [${label}](#${heading.anchor})`;
@@ -114,7 +123,12 @@ export function generateToc(markdown: string, maxDepth = 6, newline = "\n", minD
 }
 
 /** Require one ordered marker pair before constructing any replacement. */
-export function updateToc(markdown: string, maxDepth = 6, minDepth = 1): string {
+export function updateToc(
+  markdown: string,
+  maxDepth = 6,
+  minDepth = 1,
+  exclude: readonly string[] = [],
+): string {
   validateMaxDepth(maxDepth);
   validateMinDepth(minDepth);
   const start = markdown.indexOf(TOC_START);
@@ -135,6 +149,6 @@ export function updateToc(markdown: string, maxDepth = 6, minDepth = 1): string 
   const newline = /\r\n|\n|\r/.exec(markdown)?.[0] ?? "\n";
   // A stale TOC must not contribute headings to its own replacement.
   const source = `${before}${newline}${after}`;
-  const toc = generateToc(source, maxDepth, newline, minDepth);
+  const toc = generateToc(source, maxDepth, newline, minDepth, exclude);
   return `${before}${newline}${toc ? toc + newline : ""}${after}`;
 }

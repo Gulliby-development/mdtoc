@@ -166,6 +166,44 @@ describe("TOC rendering and marker replacement", () => {
     expect(generateToc("# Usage\n## Usage", 6, "\n", 2)).toBe("- [Usage](#usage-1)");
   });
 
+  test("excludes exact visible text case-sensitively and keeps duplicate headings' children", () => {
+    const markdown = "# License\n## Installation\n### License\n## license\n## Licenses";
+    expect(generateToc(markdown, 6, "\n", 1, ["License", "Licens"])).toBe(
+      "  - [Installation](#installation)\n  - [license](#license-2)\n  - [Licenses](#licenses)",
+    );
+  });
+
+  test("excludes Setext and inline-formatted headings by their visible text", () => {
+    const markdown = [
+      "Visible `License`",
+      "===",
+      "## **License** and [Guide](guide.md)",
+      "## License policy",
+    ].join("\n");
+    expect(generateToc(markdown, 6, "\n", 1, ["Visible License", "License and Guide"])).toBe(
+      "  - [License policy](#license-policy)",
+    );
+  });
+
+  test("exclusion keeps anchors assigned over all headings", () => {
+    expect(generateToc("## Usage!\n## Usage", 6, "\n", 1, ["Usage!"])).toBe(
+      "  - [Usage](#usage-1)",
+    );
+  });
+
+  test("excluding every heading produces an empty TOC block", () => {
+    expect(updateToc(marked("# License\n## License"), 6, 1, ["License"])).toBe(
+      "<!-- toc -->\n<!-- tocstop -->\n# License\n## License",
+    );
+  });
+
+  test("exclusion composes with minimum and maximum depth", () => {
+    const markdown = "# Guide\n## License\n## Installation\n### Sub\n#### Details";
+    expect(generateToc(markdown, 3, "\n", 2, ["License"])).toBe(
+      "- [Installation](#installation)\n  - [Sub](#sub)",
+    );
+  });
+
   test("minimum depth can produce an empty TOC block", () => {
     expect(updateToc(marked("# Guide\n## Installation"), 6, 3)).toBe(
       "<!-- toc -->\n<!-- tocstop -->\n# Guide\n## Installation",
@@ -222,6 +260,7 @@ describe("CLI argument parsing", () => {
       check: false,
       maxDepth: 6,
       minDepth: 1,
+      exclude: [],
       help: false,
     });
   });
@@ -248,6 +287,28 @@ describe("CLI argument parsing", () => {
     expect(parseArgs(["--min-depth", "2", "guide.md"])).toEqual(
       parseArgs(["--min-depth=2", "guide.md"]),
     );
+  });
+
+  test("accepts repeatable exclusion options and trims their values", () => {
+    expect(parseArgs(["--exclude", " License ", "guide.md", "--exclude=Usage"])).toEqual({
+      files: ["guide.md"],
+      check: false,
+      maxDepth: 6,
+      minDepth: 1,
+      exclude: ["License", "Usage"],
+      help: false,
+    });
+  });
+
+  test("consumes an option-looking argument as the exclusion text", () => {
+    expect(parseArgs(["--exclude", "--check", "README.md"])).toEqual({
+      files: ["README.md"],
+      check: false,
+      maxDepth: 6,
+      minDepth: 1,
+      exclude: ["--check"],
+      help: false,
+    });
   });
 
   test("supports help and option-like paths after --", () => {
@@ -403,6 +464,61 @@ describe("CLI subprocess behavior", () => {
     expect(readFileSync(second, "utf8")).toBe(updateToc(marked(body), 1));
   });
 
+  test("applies exclusions to every file and checks both added and removed exclusions", async () => {
+    const files = [join(directory, "first.md"), join(directory, "second.md")];
+    const body = "# Guide\n## License\n## Usage\n### Sub";
+    for (const path of files) writeFileSync(path, marked(body));
+
+    expect((await run(files)).exitCode).toBe(0);
+    const fullTocs = files.map((path) => readFileSync(path));
+    const staleWithExclusion = await run([
+      "--check",
+      files[0],
+      "--min-depth",
+      "2",
+      "--exclude",
+      "License",
+      files[1],
+    ]);
+    expect(staleWithExclusion.exitCode).toBe(1);
+    expect(staleWithExclusion.stderr).toContain("TOC is stale");
+    expect(files.map((path) => readFileSync(path))).toEqual(fullTocs);
+
+    const generated = await run(["--exclude=License", "--min-depth=2", ...files]);
+    expect(generated.exitCode).toBe(0);
+    const excludedTocs = files.map((path) => readFileSync(path, "utf8"));
+    expect(excludedTocs).toEqual(files.map(() => updateToc(marked(body), 6, 2, ["License"])));
+
+    const current = await run(["--check", "--min-depth", "2", "--exclude=License", ...files]);
+    expect(current.exitCode).toBe(0);
+    expect(current.stderr).toBe("");
+
+    const staleWithoutExclusion = await run(["--check", files[0], "--min-depth", "2", files[1]]);
+    expect(staleWithoutExclusion.exitCode).toBe(1);
+    expect(staleWithoutExclusion.stderr).toContain("TOC is stale");
+    expect(files.map((path) => readFileSync(path, "utf8"))).toEqual(excludedTocs);
+  });
+
+  test("consumes --check as exclusion text in a real CLI invocation", async () => {
+    writeFileSync(file, marked("# Guide\n## --check"));
+    const result = await run(["--exclude", "--check", file]);
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(
+      "<!-- toc -->\n- [Guide](#guide)\n<!-- tocstop -->\n# Guide\n## --check",
+    );
+  });
+
+  test.each([
+    { args: ["--exclude"], message: "--exclude requires a non-empty heading text." },
+    { args: ["--exclude", ""], message: "--exclude requires a non-empty heading text." },
+    { args: ["--exclude", "  "], message: "--exclude requires a non-empty heading text." },
+    { args: ["--exclude="], message: "--exclude requires a non-empty heading text." },
+  ])("rejects an empty exclusion value: $args", async ({ args, message }) => {
+    const result = await run([...args]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe(`mdtoc: ${message}\n`);
+  });
+
   test("generates with minimum depth and checks matching or stale TOCs", async () => {
     const body = "# Guide\n## Installation\n## Usage\n### Sub";
     writeFileSync(file, marked(body));
@@ -549,9 +665,10 @@ describe("CLI subprocess behavior", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("help documents minimum depth", async () => {
+  test("help documents minimum depth and heading exclusion", async () => {
     const result = await run(["--help"]);
     expect(result.stdout).toContain("--min-depth");
+    expect(result.stdout).toContain("--exclude");
   });
 
   test("accepts a relative, option-like filename after --", async () => {
@@ -611,6 +728,43 @@ describe("documentation, license, and existing scaffold", () => {
       ]);
       expect(exitCode).toBe(1);
       expect(stderr.trimEnd()).toBe(example);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("README heading exclusion example matches real CLI output", async () => {
+    expect(readme).toContain("### Leave out headings");
+    expect(readme).toContain("bun run src/cli.ts --min-depth 2 --exclude License README.md");
+
+    const toc = ["- [Installation](#installation)", "- [Usage](#usage)", "  - [Sub](#sub)"].join(
+      "\n",
+    );
+    expect(readme).toContain(["```markdown", toc, "```"].join("\n"));
+
+    const directory = mkdtempSync(join(tmpdir(), "mdtoc exclusion example "));
+    const exampleFile = join(directory, "README.md");
+    const headings = ["# Guide", "## Installation", "## Usage", "### Sub", "## License"];
+    writeFileSync(exampleFile, ["<!-- toc -->", "<!-- tocstop -->", ...headings].join("\n"));
+    try {
+      const child = Bun.spawn(
+        [process.execPath, "run", cli, "--min-depth", "2", "--exclude", "License", exampleFile],
+        {
+          cwd: directory,
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 30_000,
+        },
+      );
+      const [exitCode, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      expect(readFileSync(exampleFile, "utf8")).toBe(
+        ["<!-- toc -->", toc, "<!-- tocstop -->", ...headings].join("\n"),
+      );
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

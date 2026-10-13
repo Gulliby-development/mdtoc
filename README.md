@@ -121,6 +121,24 @@ For a file with `# Guide`, `## Installation`, `## Usage`, and `### Sub`, the gen
 
 `--min-depth` accepts integers from 1 through 6. Entries are indented relative to the selected minimum depth. Use the same depth when generating and checking.
 
+### Leave out headings
+
+Use `--exclude` to leave out headings by their visible text. For a file with `# Guide`, the marker pair, `## Installation`, `## Usage`, `### Sub`, and `## License`, run:
+
+```sh
+bun run src/cli.ts --min-depth 2 --exclude License README.md
+```
+
+The generated entries are:
+
+```markdown
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Sub](#sub)
+```
+
+The match is exact and case-sensitive, and every heading with matching text is left out. Sub-headings stay, and entries keep their indentation relative to the minimum depth, so combine `--exclude` with `--min-depth 2` to omit a `#` page title without indenting the top entries. Anchors are still counted over all headings, including excluded headings. Use the same options when generating and checking.
+
 ### Options
 
 | Option | Description |
@@ -129,6 +147,7 @@ For a file with `# Guide`, `## Installation`, `## Usage`, and `### Sub`, the gen
 | `--check` | Do not write; exit 1 if the table of contents is stale. |
 | `--max-depth <1-6>` | Include headings only up to this level. |
 | `--min-depth <1-6>` | Skip heading levels above this depth (default 1). |
+| `--exclude <text>` | Leave out headings whose text is exactly this (repeatable). |
 
 ### Headings and anchors
 
