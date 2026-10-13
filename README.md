@@ -139,12 +139,40 @@ The generated entries are:
 
 The match is exact and case-sensitive, and every heading with matching text is left out. Sub-headings stay, and entries keep their indentation relative to the minimum depth, so combine `--exclude` with `--min-depth 2` to omit a `#` page title without indenting the top entries. Anchors are still counted over all headings, including excluded headings. Use the same options when generating and checking.
 
+### Preview without markers
+
+Use `--print` to show the generated entries without touching the file. It needs no marker pair and prints the entries that would go between the markers, with LF line endings and no marker lines.
+
+For a `NOTES.md` file containing `# Guide`, `## Installation`, `## Usage`, `### Sub`, and `## License`, run:
+
+```sh
+bun run src/cli.ts --print --min-depth 2 --exclude License NOTES.md
+```
+
+The output is:
+
+```markdown
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Sub](#sub)
+```
+
+`--print` accepts exactly one file and cannot be combined with `--check`. Either error exits 1:
+
+```text
+mdtoc: --print accepts exactly one file.
+mdtoc: --print and --check cannot be used together.
+```
+
+When no heading is selected, nothing is printed.
+
 ### Options
 
 | Option | Description |
 |---|---|
 | `<file>...` | Markdown files to update (or check). |
 | `--check` | Do not write; exit 1 if the table of contents is stale. |
+| `--print` | Print the entries to stdout instead of updating the file (one file, no markers needed). |
 | `--max-depth <1-6>` | Include headings only up to this level. |
 | `--min-depth <1-6>` | Skip heading levels above this depth (default 1). |
 | `--exclude <text>` | Leave out headings whose text is exactly this (repeatable). |
