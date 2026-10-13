@@ -1,21 +1,23 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { updateToc, validateMaxDepth, validateMinDepth } from "./toc";
+import { generateToc, updateToc, validateMaxDepth, validateMinDepth } from "./toc";
 
 export interface CliOptions {
   files: string[];
   check: boolean;
+  print: boolean;
   maxDepth: number;
   minDepth: number;
   exclude: string[];
   help: boolean;
 }
 
-export const USAGE = `Usage: bun run src/cli.ts [--check] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...
+export const USAGE = `Usage: bun run src/cli.ts [--check] [--print] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...
 
 Generate a Markdown table of contents between <!-- toc --> and <!-- tocstop -->.
   <file>...           Markdown files to update (or check).
   --check             Exit 1 if the TOC is stale; never write the files.
+  --print             Print the generated entries to stdout; never write; no markers needed.
   --max-depth <1-6>   Include heading levels up to this depth (default: 6).
   --min-depth <1-6>   Skip heading levels above this depth (default: 1).
   --exclude <text>    Leave out headings with this exact text (repeatable).
@@ -26,6 +28,7 @@ export function parseArgs(args: string[]): CliOptions {
   const options: CliOptions = {
     files: [],
     check: false,
+    print: false,
     maxDepth: 6,
     minDepth: 1,
     exclude: [],
@@ -40,6 +43,8 @@ export function parseArgs(args: string[]): CliOptions {
       options.help = true;
     } else if (!positionalOnly && argument === "--check") {
       options.check = true;
+    } else if (!positionalOnly && argument === "--print") {
+      options.print = true;
     } else if (
       !positionalOnly &&
       (argument === "--max-depth" || argument.startsWith("--max-depth="))
@@ -81,6 +86,12 @@ export function parseArgs(args: string[]): CliOptions {
   if (!options.help && options.files.length === 0) {
     throw new Error("Provide a Markdown file path. Use --help for usage.");
   }
+  if (!options.help && options.print && options.check) {
+    throw new Error("--print and --check cannot be used together.");
+  }
+  if (!options.help && options.print && options.files.length > 1) {
+    throw new Error("--print accepts exactly one file.");
+  }
   return options;
 }
 
@@ -90,6 +101,20 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
     const options = parseArgs(args);
     if (options.help) {
       console.log(USAGE);
+      return 0;
+    }
+    if (options.print) {
+      const markdown = await readFile(options.files[0], "utf8");
+      const entries = generateToc(
+        markdown,
+        options.maxDepth,
+        "\n",
+        options.minDepth,
+        options.exclude,
+      );
+      if (entries) {
+        console.log(entries);
+      }
       return 0;
     }
     let failed = false;

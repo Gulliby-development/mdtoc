@@ -258,6 +258,7 @@ describe("CLI argument parsing", () => {
     expect(parseArgs(["guide.md"])).toEqual({
       files: ["guide.md"],
       check: false,
+      print: false,
       maxDepth: 6,
       minDepth: 1,
       exclude: [],
@@ -293,6 +294,7 @@ describe("CLI argument parsing", () => {
     expect(parseArgs(["--exclude", " License ", "guide.md", "--exclude=Usage"])).toEqual({
       files: ["guide.md"],
       check: false,
+      print: false,
       maxDepth: 6,
       minDepth: 1,
       exclude: ["License", "Usage"],
@@ -304,6 +306,7 @@ describe("CLI argument parsing", () => {
     expect(parseArgs(["--exclude", "--check", "README.md"])).toEqual({
       files: ["README.md"],
       check: false,
+      print: false,
       maxDepth: 6,
       minDepth: 1,
       exclude: ["--check"],
