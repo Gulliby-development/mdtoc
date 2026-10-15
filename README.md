@@ -54,7 +54,7 @@ Given a file with `## Installation`, `## Usage`, `### Sub`, a second `## Usage`,
 <!-- tocstop -->
 ```
 
-Only the content between the markers is replaced. Text outside the markers is preserved, including line endings. Missing markers are an error and leave the file unchanged: mdtoc does not add them for you.
+Only the content between the markers is replaced. Text outside the markers is preserved, including line endings. Missing markers are an error and leave the file unchanged unless `--insert` is given (see "Add the markers").
 
 ### Check in CI
 
@@ -176,6 +176,37 @@ When no heading is selected, nothing is printed.
 | `--max-depth <1-6>` | Include headings only up to this level. |
 | `--min-depth <1-6>` | Skip heading levels above this depth (default 1). |
 | `--exclude <text>` | Leave out headings whose text is exactly this (repeatable). |
+| `--insert` | Add the marker pair first when the file has neither marker. |
+
+### Add the markers
+
+Use `--insert` to start a table of contents in a file that has no markers yet. When the file contains neither `<!-- toc -->` nor `<!-- tocstop -->`, mdtoc adds the pair directly after the first level-1 ATX heading outside code fences (or at the start of the file when there is none), with no blank line added, and then generates the entries. A file that already has markers is refreshed as without the flag, so the command is safe to repeat; a file with only one marker is still an error. For a `NOTES.md` file containing `# Guide`, `## Installation` and `## Usage` with blank lines between them, run:
+
+```sh
+bun run src/cli.ts --insert NOTES.md
+```
+
+The file becomes:
+
+```markdown
+# Guide
+<!-- toc -->
+- [Guide](#guide)
+  - [Installation](#installation)
+  - [Usage](#usage)
+<!-- tocstop -->
+
+## Installation
+
+## Usage
+```
+
+`--insert` cannot be combined with `--check` or `--print`; either error exits 1:
+
+```text
+mdtoc: --insert and --check cannot be used together.
+mdtoc: --insert and --print cannot be used together.
+```
 
 ### Headings and anchors
 

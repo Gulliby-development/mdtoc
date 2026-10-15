@@ -246,7 +246,7 @@ describe("print mode CLI", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
     expect(output).toContain(
-      "Usage: bun run src/cli.ts [--check] [--print] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...",
+      "Usage: bun run src/cli.ts [--check] [--print] [--insert] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...",
     );
     const checkLine = output.indexOf(
       "  --check             Exit 1 if the TOC is stale; never write the files.",
