@@ -39,11 +39,54 @@ export function slugify(text: string): string {
     .replace(/\s+/g, "-");
 }
 
+interface ScannedLine {
+  line: string;
+  end: number;
+  outsideFence: boolean;
+}
+
+/** Iterate source lines while applying the fence rules shared by heading parsing and insertion. */
+function* scanMarkdownLines(markdown: string): Generator<ScannedLine> {
+  let fence: { character: string; length: number } | undefined;
+  const separators = /\r\n|\n|\r/g;
+  let lineStart = 0;
+
+  function isOutsideFence(line: string): boolean {
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence) {
+      if (
+        fenceMatch &&
+        fenceMatch[1][0] === fence.character &&
+        fenceMatch[1].length >= fence.length &&
+        fenceMatch[2].trim() === ""
+      ) {
+        fence = undefined;
+      }
+      return false;
+    }
+    if (fenceMatch && (fenceMatch[1][0] !== "`" || !fenceMatch[2].includes("`"))) {
+      fence = { character: fenceMatch[1][0], length: fenceMatch[1].length };
+      return false;
+    }
+    return true;
+  }
+
+  let separator = separators.exec(markdown);
+  while (separator) {
+    const line = markdown.slice(lineStart, separator.index);
+    yield { line, end: separator.index, outsideFence: isOutsideFence(line) };
+    lineStart = separators.lastIndex;
+    separator = separators.exec(markdown);
+  }
+  const line = markdown.slice(lineStart);
+  yield { line, end: markdown.length, outsideFence: isOutsideFence(line) };
+}
+
 /** Parse ATX and single-line Setext headings outside fenced code blocks. */
 export function extractHeadings(markdown: string): Heading[] {
   const headings: Heading[] = [];
   const usedAnchors = new Set<string>();
-  let fence: { character: string; length: number } | undefined;
+
   let previous = "";
 
   function addHeading(level: number, raw: string): void {
@@ -59,22 +102,8 @@ export function extractHeadings(markdown: string): Heading[] {
     headings.push({ level, text, anchor });
   }
 
-  for (const line of markdown.split(/\r\n|\n|\r/)) {
-    const fenceMatch = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-    if (fence) {
-      if (
-        fenceMatch &&
-        fenceMatch[1][0] === fence.character &&
-        fenceMatch[1].length >= fence.length &&
-        fenceMatch[2].trim() === ""
-      ) {
-        fence = undefined;
-      }
-      previous = "";
-      continue;
-    }
-    if (fenceMatch && (fenceMatch[1][0] !== "`" || !fenceMatch[2].includes("`"))) {
-      fence = { character: fenceMatch[1][0], length: fenceMatch[1].length };
+  for (const { line, outsideFence } of scanMarkdownLines(markdown)) {
+    if (!outsideFence) {
       previous = "";
       continue;
     }
@@ -99,6 +128,21 @@ export function extractHeadings(markdown: string): Heading[] {
         : "";
   }
   return headings;
+}
+
+/** Add a marker pair when neither literal marker is already present. */
+export function insertMarkers(markdown: string): string {
+  if (markdown.includes(TOC_START) || markdown.includes(TOC_END)) {
+    return markdown;
+  }
+
+  const newline = /\r\n|\n|\r/.exec(markdown)?.[0] ?? "\n";
+  for (const { line, end, outsideFence } of scanMarkdownLines(markdown)) {
+    if (outsideFence && /^ {0,3}#(?:[ \t]+.*|[ \t]*)$/.test(line)) {
+      return `${markdown.slice(0, end)}${newline}${TOC_START}${newline}${TOC_END}${markdown.slice(end)}`;
+    }
+  }
+  return `${TOC_START}${newline}${TOC_END}${newline}${markdown}`;
 }
 
 export function generateToc(
