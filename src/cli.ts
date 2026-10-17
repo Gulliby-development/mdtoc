@@ -7,19 +7,21 @@ export interface CliOptions {
   check: boolean;
   print: boolean;
   insert?: boolean;
+  numbered?: boolean;
   maxDepth: number;
   minDepth: number;
   exclude: string[];
   help: boolean;
 }
 
-export const USAGE = `Usage: bun run src/cli.ts [--check] [--print] [--insert] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...
+export const USAGE = `Usage: bun run src/cli.ts [--check] [--print] [--insert] [--numbered] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...
 
 Generate a Markdown table of contents between <!-- toc --> and <!-- tocstop -->.
   <file>...           Markdown files to update (or check).
   --check             Exit 1 if the TOC is stale; never write the files.
   --print             Print the generated entries to stdout; never write; no markers needed.
   --insert            Add the marker pair first when the file has neither marker.
+  --numbered          Write the entries as a numbered list (1. 2. 3.) instead of bullets.
   --max-depth <1-6>   Include heading levels up to this depth (default: 6).
   --min-depth <1-6>   Skip heading levels above this depth (default: 1).
   --exclude <text>    Leave out headings with this exact text (repeatable).
@@ -49,6 +51,8 @@ export function parseArgs(args: string[]): CliOptions {
       options.print = true;
     } else if (!positionalOnly && argument === "--insert") {
       options.insert = true;
+    } else if (!positionalOnly && argument === "--numbered") {
+      options.numbered = true;
     } else if (
       !positionalOnly &&
       (argument === "--max-depth" || argument.startsWith("--max-depth="))
@@ -121,6 +125,7 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
         "\n",
         options.minDepth,
         options.exclude,
+        options.numbered,
       );
       if (entries) {
         console.log(entries);
@@ -133,7 +138,13 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
       try {
         const markdown = await readFile(file, "utf8");
         const source = options.insert ? insertMarkers(markdown) : markdown;
-        const updated = updateToc(source, options.maxDepth, options.minDepth, options.exclude);
+        const updated = updateToc(
+          source,
+          options.maxDepth,
+          options.minDepth,
+          options.exclude,
+          options.numbered,
+        );
         if (options.check) {
           if (updated !== markdown) {
             console.error(`TOC is stale in "${file}". Run without --check to update it.`);
