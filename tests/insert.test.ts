@@ -364,7 +364,7 @@ describe("insert option CLI", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
     expect(output).toContain(
-      "Usage: bun run src/cli.ts [--check] [--print] [--insert] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...",
+      "Usage: bun run src/cli.ts [--check] [--print] [--insert] [--numbered] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...",
     );
     expect(insertLine).toBeGreaterThan(printLine);
   });

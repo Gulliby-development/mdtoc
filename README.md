@@ -166,6 +166,28 @@ mdtoc: --print and --check cannot be used together.
 
 When no heading is selected, nothing is printed.
 
+### Numbered list
+
+Use `--numbered` to write the entries as an ordered list instead of bullets. Each entry is numbered among its siblings, starting at 1 under every new parent, and each level is indented by four spaces so that the nesting also renders for numbers above 9. The depth, exclusion and anchor rules are unchanged, and the numbers count only the entries that are kept.
+
+For a `NOTES.md` file containing `# Guide`, `## Installation`, `## Usage`, `### Sub`, `### More` and `## License`, run:
+
+```sh
+bun run src/cli.ts --print --numbered --min-depth 2 NOTES.md
+```
+
+The output is:
+
+```markdown
+1. [Installation](#installation)
+2. [Usage](#usage)
+    1. [Sub](#sub)
+    2. [More](#more)
+3. [License](#license)
+```
+
+`--numbered` works with generating, `--check`, `--print` and `--insert`; use the same flag when generating and checking, because a bulleted block counts as stale under `--check --numbered`.
+
 ### Options
 
 | Option | Description |
@@ -177,6 +199,7 @@ When no heading is selected, nothing is printed.
 | `--min-depth <1-6>` | Skip heading levels above this depth (default 1). |
 | `--exclude <text>` | Leave out headings whose text is exactly this (repeatable). |
 | `--insert` | Add the marker pair first when the file has neither marker. |
+| `--numbered` | Write the entries as a numbered list (`1.`, `2.`) instead of bullets. |
 
 ### Add the markers
 

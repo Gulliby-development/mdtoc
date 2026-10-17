@@ -151,9 +151,11 @@ export function generateToc(
   newline = "\n",
   minDepth = 1,
   exclude: readonly string[] = [],
+  numbered = false,
 ): string {
   validateMaxDepth(maxDepth);
   validateMinDepth(minDepth);
+  const numberedCounts: number[] = [];
   return extractHeadings(markdown)
     .filter(
       (heading) =>
@@ -161,7 +163,13 @@ export function generateToc(
     )
     .map((heading) => {
       const label = heading.text.replace(/\\/g, "\\\\").replace(/[[\]]/g, "\\$&");
-      return `${"  ".repeat(heading.level - minDepth)}- [${label}](#${heading.anchor})`;
+      const depth = heading.level - minDepth;
+      if (!numbered) {
+        return `${"  ".repeat(depth)}- [${label}](#${heading.anchor})`;
+      }
+      numberedCounts[depth] = (numberedCounts[depth] ?? 0) + 1;
+      numberedCounts.length = depth + 1;
+      return `${"    ".repeat(depth)}${numberedCounts[depth]}. [${label}](#${heading.anchor})`;
     })
     .join(newline);
 }
@@ -172,6 +180,7 @@ export function updateToc(
   maxDepth = 6,
   minDepth = 1,
   exclude: readonly string[] = [],
+  numbered = false,
 ): string {
   validateMaxDepth(maxDepth);
   validateMinDepth(minDepth);
@@ -193,6 +202,6 @@ export function updateToc(
   const newline = /\r\n|\n|\r/.exec(markdown)?.[0] ?? "\n";
   // A stale TOC must not contribute headings to its own replacement.
   const source = `${before}${newline}${after}`;
-  const toc = generateToc(source, maxDepth, newline, minDepth, exclude);
+  const toc = generateToc(source, maxDepth, newline, minDepth, exclude, numbered);
   return `${before}${newline}${toc ? toc + newline : ""}${after}`;
 }
