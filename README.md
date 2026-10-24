@@ -188,6 +188,22 @@ The output is:
 
 `--numbered` works with generating, `--check`, `--print` and `--insert`; use the same flag when generating and checking, because a bulleted block counts as stale under `--check --numbered`.
 
+### Version
+
+Use `--version` (or `-v`) to print the version of mdtoc, read from `package.json`, and exit. It needs no file and writes nothing:
+
+```sh
+bun run src/cli.ts --version
+```
+
+The output is:
+
+```text
+mdtoc 0.2.0
+```
+
+`bun run start -- --version` does the same through the `start` script of `package.json`. `--help` wins when both are given, and an invalid option value is still an error.
+
 ### Options
 
 | Option | Description |
@@ -200,6 +216,7 @@ The output is:
 | `--exclude <text>` | Leave out headings whose text is exactly this (repeatable). |
 | `--insert` | Add the marker pair first when the file has neither marker. |
 | `--numbered` | Write the entries as a numbered list (`1.`, `2.`) instead of bullets. |
+| `--version`, `-v` | Print the version from package.json and exit. |
 
 ### Add the markers
 
