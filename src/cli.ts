@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { generateToc, insertMarkers, updateToc, validateMaxDepth, validateMinDepth } from "./toc";
@@ -8,6 +9,7 @@ export interface CliOptions {
   print: boolean;
   insert?: boolean;
   numbered?: boolean;
+  version?: boolean;
   maxDepth: number;
   minDepth: number;
   exclude: string[];
@@ -26,6 +28,7 @@ Generate a Markdown table of contents between <!-- toc --> and <!-- tocstop -->.
   --min-depth <1-6>   Skip heading levels above this depth (default: 1).
   --exclude <text>    Leave out headings with this exact text (repeatable).
   --help, -h          Show this help.
+  --version, -v       Print the version from package.json and exit.
   --                  Treat remaining arguments as file paths.`;
 
 export function parseArgs(args: string[]): CliOptions {
@@ -45,6 +48,8 @@ export function parseArgs(args: string[]): CliOptions {
       positionalOnly = true;
     } else if (!positionalOnly && (argument === "--help" || argument === "-h")) {
       options.help = true;
+    } else if (!positionalOnly && (argument === "--version" || argument === "-v")) {
+      options.version = true;
     } else if (!positionalOnly && argument === "--check") {
       options.check = true;
     } else if (!positionalOnly && argument === "--print") {
@@ -91,19 +96,19 @@ export function parseArgs(args: string[]): CliOptions {
   if (options.minDepth > options.maxDepth) {
     throw new Error("--min-depth must not be greater than --max-depth.");
   }
-  if (!options.help && options.files.length === 0) {
+  if (!options.help && !options.version && options.files.length === 0) {
     throw new Error("Provide a Markdown file path. Use --help for usage.");
   }
-  if (!options.help && options.print && options.check) {
+  if (!options.help && !options.version && options.print && options.check) {
     throw new Error("--print and --check cannot be used together.");
   }
-  if (!options.help && options.print && options.files.length > 1) {
+  if (!options.help && !options.version && options.print && options.files.length > 1) {
     throw new Error("--print accepts exactly one file.");
   }
-  if (!options.help && options.insert && options.check) {
+  if (!options.help && !options.version && options.insert && options.check) {
     throw new Error("--insert and --check cannot be used together.");
   }
-  if (!options.help && options.insert && options.print) {
+  if (!options.help && !options.version && options.insert && options.print) {
     throw new Error("--insert and --print cannot be used together.");
   }
   return options;
@@ -115,6 +120,13 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
     const options = parseArgs(args);
     if (options.help) {
       console.log(USAGE);
+      return 0;
+    }
+    if (options.version) {
+      const manifest = JSON.parse(
+        readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+      ) as { version: string };
+      console.log(`mdtoc ${manifest.version}`);
       return 0;
     }
     if (options.print) {
