@@ -9,6 +9,7 @@ export interface CliOptions {
   print: boolean;
   insert?: boolean;
   numbered?: boolean;
+  bullet?: string;
   version?: boolean;
   maxDepth: number;
   minDepth: number;
@@ -16,7 +17,7 @@ export interface CliOptions {
   help: boolean;
 }
 
-export const USAGE = `Usage: bun run src/cli.ts [--check] [--print] [--insert] [--numbered] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...
+export const USAGE = `Usage: bun run src/cli.ts [--check] [--print] [--insert] [--numbered] [--bullet <-|*|+>] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...
 
 Generate a Markdown table of contents between <!-- toc --> and <!-- tocstop -->.
   <file>...           Markdown files to update (or check).
@@ -24,6 +25,7 @@ Generate a Markdown table of contents between <!-- toc --> and <!-- tocstop -->.
   --print             Print the generated entries to stdout; never write; no markers needed.
   --insert            Add the marker pair first when the file has neither marker.
   --numbered          Write the entries as a numbered list (1. 2. 3.) instead of bullets.
+  --bullet <-|*|+>    Use this marker for the bullets instead of - (not with --numbered).
   --max-depth <1-6>   Include heading levels up to this depth (default: 6).
   --min-depth <1-6>   Skip heading levels above this depth (default: 1).
   --exclude <text>    Leave out headings with this exact text (repeatable).
@@ -58,6 +60,12 @@ export function parseArgs(args: string[]): CliOptions {
       options.insert = true;
     } else if (!positionalOnly && argument === "--numbered") {
       options.numbered = true;
+    } else if (!positionalOnly && (argument === "--bullet" || argument.startsWith("--bullet="))) {
+      const value = argument === "--bullet" ? args[++index] : argument.slice("--bullet=".length);
+      if (value !== "-" && value !== "*" && value !== "+") {
+        throw new Error("--bullet must be -, * or +.");
+      }
+      options.bullet = value;
     } else if (
       !positionalOnly &&
       (argument === "--max-depth" || argument.startsWith("--max-depth="))
@@ -111,6 +119,9 @@ export function parseArgs(args: string[]): CliOptions {
   if (!options.help && !options.version && options.insert && options.print) {
     throw new Error("--insert and --print cannot be used together.");
   }
+  if (!options.help && !options.version && options.bullet && options.numbered) {
+    throw new Error("--bullet and --numbered cannot be used together.");
+  }
   return options;
 }
 
@@ -138,6 +149,7 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
         options.minDepth,
         options.exclude,
         options.numbered,
+        options.bullet,
       );
       if (entries) {
         console.log(entries);
@@ -156,6 +168,7 @@ export async function main(args: string[] = Bun.argv.slice(2)): Promise<number> 
           options.minDepth,
           options.exclude,
           options.numbered,
+          options.bullet,
         );
         if (options.check) {
           if (updated !== markdown) {

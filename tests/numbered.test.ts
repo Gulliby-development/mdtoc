@@ -127,7 +127,7 @@ describe("numbered table of contents", () => {
     expect(help.exitCode).toBe(0);
     expect(help.stderr).toBe("");
     expect(output.split("\n")[0]).toBe(
-      "Usage: bun run src/cli.ts [--check] [--print] [--insert] [--numbered] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...",
+      "Usage: bun run src/cli.ts [--check] [--print] [--insert] [--numbered] [--bullet <-|*|+>] [--max-depth <1-6>] [--min-depth <1-6>] [--exclude <text>]... <file>...",
     );
     const helpLines = output.split("\n");
     const insertLine = helpLines.indexOf(
