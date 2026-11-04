@@ -188,6 +188,25 @@ The output is:
 
 `--numbered` works with generating, `--check`, `--print` and `--insert`; use the same flag when generating and checking, because a bulleted block counts as stale under `--check --numbered`.
 
+### Bullet marker
+
+Use `--bullet` to choose the marker of the bullets: `-` (the default), `*` or `+`. It takes the next argument as its value, or `--bullet=MARKER`, and any other value is an error. Nested entries keep their two-space indentation.
+
+For a file with `# Guide`, `## Installation` and `### Sub`, `bun run src/cli.ts --print --bullet "*" README.md` prints:
+
+```markdown
+* [Guide](#guide)
+  * [Installation](#installation)
+    * [Sub](#sub)
+```
+
+`--bullet` works with generating, `--check`, `--print` and `--insert`; use the same marker when generating and checking, because a block with another marker counts as stale. It cannot be combined with `--numbered`, which writes numbers instead of bullets, and an invalid value or the combination exits 1:
+
+```text
+mdtoc: --bullet must be -, * or +.
+mdtoc: --bullet and --numbered cannot be used together.
+```
+
 ### Version
 
 Use `--version` (or `-v`) to print the version of mdtoc, read from `package.json`, and exit. It needs no file and writes nothing:
@@ -216,6 +235,7 @@ mdtoc 0.2.0
 | `--exclude <text>` | Leave out headings whose text is exactly this (repeatable). |
 | `--insert` | Add the marker pair first when the file has neither marker. |
 | `--numbered` | Write the entries as a numbered list (`1.`, `2.`) instead of bullets. |
+| `--bullet <marker>` | Use `-`, `*` or `+` for the bullets (default `-`; not with `--numbered`). |
 | `--version`, `-v` | Print the version from package.json and exit. |
 
 ### Add the markers

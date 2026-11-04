@@ -152,6 +152,7 @@ export function generateToc(
   minDepth = 1,
   exclude: readonly string[] = [],
   numbered = false,
+  bullet = "-",
 ): string {
   validateMaxDepth(maxDepth);
   validateMinDepth(minDepth);
@@ -165,7 +166,7 @@ export function generateToc(
       const label = heading.text.replace(/\\/g, "\\\\").replace(/[[\]]/g, "\\$&");
       const depth = heading.level - minDepth;
       if (!numbered) {
-        return `${"  ".repeat(depth)}- [${label}](#${heading.anchor})`;
+        return `${"  ".repeat(depth)}${bullet} [${label}](#${heading.anchor})`;
       }
       numberedCounts[depth] = (numberedCounts[depth] ?? 0) + 1;
       numberedCounts.length = depth + 1;
@@ -181,6 +182,7 @@ export function updateToc(
   minDepth = 1,
   exclude: readonly string[] = [],
   numbered = false,
+  bullet = "-",
 ): string {
   validateMaxDepth(maxDepth);
   validateMinDepth(minDepth);
@@ -202,6 +204,6 @@ export function updateToc(
   const newline = /\r\n|\n|\r/.exec(markdown)?.[0] ?? "\n";
   // A stale TOC must not contribute headings to its own replacement.
   const source = `${before}${newline}${after}`;
-  const toc = generateToc(source, maxDepth, newline, minDepth, exclude, numbered);
+  const toc = generateToc(source, maxDepth, newline, minDepth, exclude, numbered, bullet);
   return `${before}${newline}${toc ? toc + newline : ""}${after}`;
 }
